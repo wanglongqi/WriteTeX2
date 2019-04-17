@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+    <_name>WriteTeX2</_name>
+    <id>tk.whywhow.writetex2</id>
+	<dependency type="executable" location="extensions">inkex.py</dependency>
+    <param name="head" type="description" appearance="header">WriteTeX^2</param>
+    <param name="head" type="description">This plug-in converts the selected text box in to LateXed results.</param>
+	<param name="preamble" type="string" _gui-text="Preamble File: "></param>
+	<param name="read-as-line" type="boolean" _gui-text="Trade above as contents">false</param>
+	<param name="scale" type="float" precision="2" min="0.1" max="50" _gui-text="Scale Factor">1</param>
+	<param name="keep" type="boolean" _gui-text="Keep the original object.">false</param>
+	<param name="pdftosvg" type="enum" _gui-text="PDF to SVG converter: ">
+		<_item value="1">PDF2SVG</_item>
+		<_item value="2">PStoEDIT</_item>
+	</param>
+    <param name="latexcmd" type="string" _gui-text="Latex Commnad used to Compile">xelatex</param>
+    <effect>
+        <object-type>all</object-type>
+        <effects-menu>
+            <submenu _name="Render"/>
+        </effects-menu>
+    </effect>
+    <script>
+        <command reldir="extensions" interpreter="python">writetex2.py</command>
+    </script>
+</inkscape-extension>
