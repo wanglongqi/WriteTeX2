@@ -11,12 +11,15 @@ An Latex equation editor for Inkscape.
 This file is a part of WriteTeX2 extension for Inkscape. For more information,
 please refer to http://wanglongqi.github.io/WriteTeX.
 """
-
+from __future__ import print_function
 import inkex
 import os
 import tempfile
 import sys
 import copy
+import subprocess
+import re
+# from distutils import spawn
 WriteTexNS = u'http://wanglongqi.github.io/WriteTeX'
 # from textext
 SVG_NS = u"http://www.w3.org/2000/svg"
@@ -27,6 +30,10 @@ class WriteTex(inkex.Effect):
 
     def __init__(self):
         inkex.Effect.__init__(self)
+        self.OptionParser.add_option("-f", "--formula",
+                                     action="store", type="string",
+                                     dest="formula", default="",
+                                     help="LaTeX formula")
         self.OptionParser.add_option("-p", "--preamble",
                                      action="store", type="string",
                                      dest="preamble", default="",
@@ -47,6 +54,9 @@ class WriteTex(inkex.Effect):
                                      action="store", type="string",
                                      dest="pdftosvg", default="",
                                      help="PDFtoSVG Converter")
+        self.OptionParser.add_option("--action", action="store",
+                                     type="string", dest="action",
+                                     default=None, help="")
         self.OptionParser.add_option("-k", "--keep",
                                      action="store", type="string",
                                      dest="keep", default="",
@@ -57,17 +67,6 @@ class WriteTex(inkex.Effect):
                                      help="Latex command used to compile")
 
     def effect(self):
-        self.zoom = float(self.document.xpath(
-            '//sodipodi:namedview/@inkscape:zoom', namespaces=inkex.NSS)[0])
-        self.width = 1/self.zoom * \
-            float(self.document.xpath(
-                '//sodipodi:namedview/@inkscape:window-width', namespaces=inkex.NSS)[0])
-        self.height = 1/self.zoom * \
-            float(self.document.xpath(
-                '//sodipodi:namedview/@inkscape:window-height', namespaces=inkex.NSS)[0])
-        self.width = self.unittouu(str(self.width)+'px')
-        self.height = self.unittouu(str(self.height)+'px')
-
         self.options.scale = float(self.options.scale)
         if len(self.selected) == 0:
             inkex.errormsg("Select some text before click Apply.")
@@ -78,11 +77,15 @@ class WriteTex(inkex.Effect):
             if '{%s}text' % WriteTexNS in node.attrib:
                 doc = inkex.etree.fromstring(
                     '<text x="%g" y="%g">%s</text>' % (
-                        self.view_center[0]-self.width/6,
-                        self.view_center[1]-self.height/6,
+                        self.view_center[0],
+                        self.view_center[1],
                         node.attrib.get(
                             '{%s}text' % WriteTexNS, '').decode('string-escape')))
                 p = node.getparent()
+                if 'transform' in node.attrib:
+                    doc.attrib['transform'] = node.attrib['transform']
+                if 'style' in node.attrib:
+                    doc.attrib['eqstyle'] = node.attrib['style']
                 if self.options.keep == "false":
                     p.remove(node)
                 p.append(doc)
@@ -96,7 +99,6 @@ class WriteTex(inkex.Effect):
             out_file = os.path.join(tmp_dir, "writetex.out")
             err_file = os.path.join(tmp_dir, "writetex.err")
             aux_file = os.path.join(tmp_dir, "writetex.aux")
-            crop_file = os.path.join(tmp_dir, "writetex-crop.pdf")
 
             if self.options.preline == "true":
                 preamble = self.options.preamble
@@ -124,34 +126,30 @@ class WriteTex(inkex.Effect):
             tex.close()
 
             if self.options.latexcmd.lower() == "xelatex":
-                os.popen('xelatex "-output-directory=%s" -interaction=nonstopmode -halt-on-error "%s" > "%s"'
-                         % (tmp_dir, tex_file, out_file))
+                subprocess.call('xelatex "-output-directory=%s" -interaction=nonstopmode -halt-on-error "%s" > "%s"'
+                                % (tmp_dir, tex_file, out_file), shell=True)
             elif self.options.latexcmd.lower() == "pdflatex":
-                os.popen('pdflatex "-output-directory=%s" -interaction=nonstopmode -halt-on-error "%s" > "%s"'
-                         % (tmp_dir, tex_file, out_file))
+                subprocess.call('pdflatex "-output-directory=%s" -interaction=nonstopmode -halt-on-error "%s" > "%s"'
+                                % (tmp_dir, tex_file, out_file), shell=True)
             else:
                 # Setting `latexcmd` to following string produces the same result as xelatex condition:
                 # 'xelatex "-output-directory={tmp_dir}" -interaction=nonstopmode -halt-on-error "{tex_file}" > "{out_file}"'
-                os.popen(self.options.latexcmd.format(
-                    tmp_dir=tmp_dir, tex_file=tex_file, out_file=out_file))
-
-            try:
-                os.popen('pdfcrop %s' % pdf_file)
-                os.remove(pdf_file)
-                os.rename(crop_file, pdf_file)
-            except:
-                pass
+               subprocess.call(self.options.latexcmd.format(
+                    tmp_dir=tmp_dir, tex_file=tex_file, out_file=out_file), shell=True)
 
             if not os.path.exists(pdf_file):
-                print >>sys.stderr, "Latex error: check your latex file and preamble."
-                print >>sys.stderr, open(log_file).read()
+                print("Latex error: check your latex file and preamble.",
+                      file=sys.stderr)
+                print(open(log_file).read(), file=sys.stderr)
+                return
             else:
                 if self.options.pdftosvg == '1':
-                    os.popen('pdf2svg %s %s' % (pdf_file, svg_file))
+                    subprocess.call('pdf2svg %s %s' %
+                                    (pdf_file, svg_file), shell=True)
                     self.merge_pdf2svg_svg(svg_file)
                 else:
-                    os.popen('pstoedit -f plot-svg "%s" "%s"  -dt -ssp -psarg -r9600x9600 > "%s" 2> "%s"'
-                             % (pdf_file, svg_file, out_file, err_file))
+                    subprocess.call('pstoedit -f plot-svg "%s" "%s"  -dt -ssp -psarg -r9600x9600 > "%s" 2> "%s"'
+                                    % (pdf_file, svg_file, out_file, err_file), shell=True)
                     self.merge_pstoedit_svg(svg_file)
 
             os.remove(tex_file)
@@ -183,6 +181,9 @@ class WriteTex(inkex.Effect):
                 if tag in ['g', 'path', 'line']:
                     child = svg_to_group(self, child)
                     svgout.append(child)
+
+            # TODO: add crop range code here.
+
             return svgout
 
         doc = inkex.etree.parse(svg_file)
@@ -196,12 +197,13 @@ class WriteTex(inkex.Effect):
                 newnode.attrib['transform'] = node.attrib['transform']
             else:
                 newnode.attrib['transform'] = 'matrix(%f,0,0,%f,%f,%f)' % (
-                    800*self.options.scale, 800*self.options.scale,
-                    self.view_center[0]-self.width/6,
-                    self.view_center[1]-self.height/6)
-            newnode.attrib['style'] = node.attrib['style']
-        except:
-            pass
+                    800 * self.options.scale, 800 * self.options.scale,
+                    self.view_center[0] - self.width / 6,
+                    self.view_center[1] - self.height / 6)
+            if 'eqstyle' in node.attrib:
+                newnode.attrib['style'] = node.attrib['eqstyle']
+        except Exception as e:
+            print(e, file=sys.stderr)
 
         p = node.getparent()
         if self.options.keep == "false":
@@ -209,10 +211,13 @@ class WriteTex(inkex.Effect):
         p.append(newnode)
 
     def merge_pdf2svg_svg(self, svg_file):
+        # This is the smallest point coordinates assumed
+        MAX_XY = [-10000000, -10000000]
+
         def svg_to_group(self, svgin):
             target = {}
             for node in svgin.xpath('//*[@id]'):
-                target['#'+node.attrib['id']] = node
+                target['#' + node.attrib['id']] = node
 
             for node in svgin.xpath('//*'):
                 if ('{%s}href' % XLINK_NS) in node.attrib:
@@ -223,6 +228,11 @@ class WriteTex(inkex.Effect):
                         node.attrib['x'], node.attrib['y'])
                     for i in target[href].iterchildren():
                         i.attrib['transform'] = trans
+                        x, y = self.parse_transform(trans)
+                        if x > MAX_XY[0]:
+                            MAX_XY[0] = x
+                        if y > MAX_XY[1]:
+                            MAX_XY[1] = y
                         p.append(copy.copy(i))
 
             svgout = inkex.etree.Element(inkex.addNS('g', 'WriteTexNS'))
@@ -248,16 +258,36 @@ class WriteTex(inkex.Effect):
             else:
                 newnode.attrib['transform'] = 'matrix(%f,0,0,%f,%f,%f)' % (
                     self.options.scale, self.options.scale,
-                    self.view_center[0]-self.width/6,
-                    self.view_center[1]-self.height/6)
-            newnode.attrib['style'] = node.attrib['style']
-        except:
-            pass
+                    self.view_center[0] - MAX_XY[0] * self.options.scale,
+                    self.view_center[1] - MAX_XY[1] * self.options.scale)
+            if 'eqstyle' in node.attrib:
+                newnode.attrib['style'] = node.attrib['eqstyle']
+        except Exception as e:
+            print(e, file=sys.stderr)
 
         p = node.getparent()
         if self.options.keep == "false":
             p.remove(node)
         p.append(newnode)
+
+    @staticmethod
+    def parse_transform(transf):
+        if transf == "" or transf is None:
+            return(0, 0)
+        stransf = transf.strip()
+        result = re.match(
+            r"(translate|scale|rotate|skewX|skewY|matrix)\s*\(([^)]*)\)\s*,?",
+            stransf)
+        if result.group(1) == "translate":
+            args = result.group(2).replace(',', ' ').split()
+            dx = float(args[0])
+            if len(args) == 1:
+                dy = 0.0
+            else:
+                dy = float(args[1])
+            return (dx, dy)
+        else:
+            return (0, 0)
 
 
 if __name__ == '__main__':
