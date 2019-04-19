@@ -5,8 +5,8 @@ writetex2.py
 An Latex equation editor for Inkscape.
 
 :Author: WANG Longqi <iqgnol@gmail.com>
-:Date: 2017-04-01
-:Version: v2.0.0
+:Date: 2019-04-19
+:Version: v2.1.0
 
 This file is a part of WriteTeX2 extension for Inkscape. For more information,
 please refer to http://wanglongqi.github.io/WriteTeX.
@@ -76,14 +76,14 @@ class WriteTex(inkex.Effect):
                 self.text = "".join(node.itertext())
             if '{%s}text' % WriteTexNS in node.attrib:
                 doc = inkex.etree.fromstring(
-                    '<text x="%g" y="%g">%s</text>' % (
+                    '<text x="%g" y="%g" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">%s</text>' % (
                         self.view_center[0],
                         self.view_center[1],
-                        node.attrib.get(
-                            '{%s}text' % WriteTexNS, '').decode('string-escape')))
+                        self.break_line(node.attrib.get(
+                            '{%s}text' % WriteTexNS, '').decode('string-escape'))))
                 p = node.getparent()
                 if 'transform' in node.attrib:
-                    doc.attrib['transform'] = node.attrib['transform']
+                    doc.attrib['eqtransform'] = node.attrib['transform']
                 if 'style' in node.attrib:
                     doc.attrib['eqstyle'] = node.attrib['style']
                 if self.options.keep == "false":
@@ -134,7 +134,7 @@ class WriteTex(inkex.Effect):
             else:
                 # Setting `latexcmd` to following string produces the same result as xelatex condition:
                 # 'xelatex "-output-directory={tmp_dir}" -interaction=nonstopmode -halt-on-error "{tex_file}" > "{out_file}"'
-               subprocess.call(self.options.latexcmd.format(
+                subprocess.call(self.options.latexcmd.format(
                     tmp_dir=tmp_dir, tex_file=tex_file, out_file=out_file), shell=True)
 
             if not os.path.exists(pdf_file):
@@ -193,8 +193,8 @@ class WriteTex(inkex.Effect):
                        WriteTexNS] = self.text.encode('string-escape')
         node = self.selected[self.options.ids[0]]
         try:
-            if 'transform' in node.attrib:
-                newnode.attrib['transform'] = node.attrib['transform']
+            if 'eqtransform' in node.attrib:
+                newnode.attrib['transform'] = node.attrib['eqtransform']
             else:
                 newnode.attrib['transform'] = 'matrix(%f,0,0,%f,%f,%f)' % (
                     800 * self.options.scale, 800 * self.options.scale,
@@ -253,8 +253,8 @@ class WriteTex(inkex.Effect):
         node = self.selected[self.options.ids[0]]
 
         try:
-            if 'transform' in node.attrib:
-                newnode.attrib['transform'] = node.attrib['transform']
+            if 'eqtransform' in node.attrib:
+                newnode.attrib['transform'] = node.attrib['eqtransform']
             else:
                 newnode.attrib['transform'] = 'matrix(%f,0,0,%f,%f,%f)' % (
                     self.options.scale, self.options.scale,
@@ -288,6 +288,31 @@ class WriteTex(inkex.Effect):
             return (dx, dy)
         else:
             return (0, 0)
+
+    MAX_COL = 80
+
+    @staticmethod
+    def break_line(string):
+        if len(string) < WriteTex.MAX_COL:
+            return string
+        parts = string.split('\\')
+        out = []
+        line = parts[0]
+        for part in parts[1:]:
+            if len(line) < WriteTex.MAX_COL:
+                line += '\\' + part
+            else:
+                out.append(line)
+                line = '\\' + part
+        if line:
+            out.append(line)
+        if len(out) == 1:
+            return string
+
+        if ''.join(out) == string:
+            return ' '.join(['<tspan sodipodi:role="line" style="line-height:2em;">%s</tspan>' % l.strip() for l in out])
+        else:
+            return string
 
 
 if __name__ == '__main__':
