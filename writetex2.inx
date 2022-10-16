@@ -2,7 +2,6 @@
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
     <_name>WriteTeX2</_name>
     <id>tk.whywhow.writetex2</id>
-	<dependency type="executable" location="extensions">inkex.py</dependency>
     <param name="head" type="description" appearance="header">WriteTeX^2</param>
     <param name="head" type="description">This plug-in converts the selected text box in to LateXed results.</param>
 	<param name="preamble" type="string" _gui-text="Preamble File: "></param>
